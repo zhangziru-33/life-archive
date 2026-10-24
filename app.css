@@ -1710,3 +1710,30 @@ body {
   color: var(--text-faint);
   font-size: 0.75rem;
 }
+
+/* ============ AI Key 配置 ============ */
+.ai-key-form {
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  background: var(--bg-2);
+}
+.ai-key-hint {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin-bottom: 0.6rem;
+  line-height: 1.6;
+}
+.ai-key-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ai-key-row .input {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.ai-bar .ai-key-row {
+  margin-bottom: 0.4rem;
+}
