@@ -1877,12 +1877,34 @@ function linkInterpretation(type, from, to) {
 }
 
 /* ============ AI 深度报告（DeepSeek，可替换） ============ */
+// 密钥不硬编码在前端：由用户在自己浏览器里输入，仅保存在 localStorage，不上传、不进代码仓库
+const AI_KEY_STORAGE = "life-archive:ai-key";
 const AI_CONFIG = {
-  // ⚠️ 演示密钥：纯前端静态站点会暴露在浏览器中，建议公开演示后到 DeepSeek 平台吊销或更换
-  apiKey: "sk-ab96116e4d5745c78ca4fbb0d745ca77",
   endpoint: "https://api.deepseek.com/chat/completions",
   model: "deepseek-chat",
 };
+
+function getAIKey() {
+  try {
+    return localStorage.getItem(AI_KEY_STORAGE) || "";
+  } catch (e) {
+    return "";
+  }
+}
+function saveAIKey(key) {
+  try {
+    localStorage.setItem(AI_KEY_STORAGE, key.trim());
+  } catch (e) {
+    /* ignore */
+  }
+}
+function clearAIKey() {
+  try {
+    localStorage.removeItem(AI_KEY_STORAGE);
+  } catch (e) {
+    /* ignore */
+  }
+}
 
 const AI_SYSTEM_PROMPT = `你是「人生未解档案·深夜灵感局」的叙事助手，负责基于用户提供的线索生成一份人生探索报告。
 必须遵守以下规则：
@@ -1937,11 +1959,13 @@ function buildArchivePrompt(archive) {
 }
 
 async function callDeepSeek(prompt) {
+  const key = getAIKey();
+  if (!key) throw new Error("AI key missing");
   const res = await fetch(AI_CONFIG.endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: "Bearer " + AI_CONFIG.apiKey,
+      Authorization: "Bearer " + key,
     },
     body: JSON.stringify({
       model: AI_CONFIG.model,
@@ -2040,6 +2064,11 @@ function renderAIResult(d) {
 }
 
 async function aiGenerateReport(arch) {
+  if (!getAIKey()) {
+    toast("请先配置 DeepSeek API Key", true);
+    renderAIBar(arch);
+    return;
+  }
   const btn = $("#btn-ai-report");
   const out = $("#ai-output");
   if (!btn || !out) return;
@@ -2051,10 +2080,58 @@ async function aiGenerateReport(arch) {
     out.innerHTML = renderAIResult(data);
   } catch (e) {
     console.warn("AI report failed:", e);
-    out.innerHTML = `<div class="ai-error">AI 服务暂时不可用（网络或服务端限制），以上报告由本地规则生成，仍可正常使用。</div>`;
+    out.innerHTML = `<div class="ai-error">AI 服务暂时不可用（网络、密钥或服务端限制）。请检查密钥是否正确，以上报告由本地规则生成，仍可正常使用。</div>`;
   } finally {
     btn.disabled = false;
     btn.textContent = "重新生成 AI 报告";
+  }
+}
+
+/* 渲染 07 区块的操作条：未配置密钥时显示输入框，已配置时显示生成按钮 */
+function renderAIBar(arch) {
+  const bar = $("#ai-bar");
+  if (!bar) return;
+  if (!getAIKey()) {
+    bar.innerHTML = `
+      <div class="ai-key-form">
+        <p class="ai-key-hint">AI 报告调用 DeepSeek 生成。你的 API Key 仅保存在当前浏览器本地（localStorage），不会上传到任何服务器，也不会写入代码仓库。生成后建议按需删除。</p>
+        <div class="ai-key-row">
+          <input id="ai-key-input" class="input" type="password" placeholder="粘贴 DeepSeek API Key（sk-…）" autocomplete="off" />
+          <button class="btn btn--cyan btn--sm" id="btn-save-ai-key">保存密钥</button>
+        </div>
+      </div>`;
+    const saveBtn = $("#btn-save-ai-key");
+    const input = $("#ai-key-input");
+    if (saveBtn && input) {
+      saveBtn.addEventListener("click", () => {
+        const key = input.value.trim();
+        if (!key.startsWith("sk-")) {
+          toast("密钥格式不正确（应以 sk- 开头）", true);
+          return;
+        }
+        saveAIKey(key);
+        input.value = "";
+        toast("密钥已保存到本浏览器");
+        renderAIBar(arch);
+        aiGenerateReport(arch);
+      });
+    }
+  } else {
+    bar.innerHTML = `
+      <div class="ai-key-row">
+        <button class="btn btn--cyan btn--sm" id="btn-ai-report">生成 AI 报告</button>
+        <button class="btn btn--ghost btn--xs" id="btn-clear-ai-key">清除密钥</button>
+      </div>`;
+    const genBtn = $("#btn-ai-report");
+    if (genBtn) genBtn.addEventListener("click", () => aiGenerateReport(arch));
+    const clearBtn = $("#btn-clear-ai-key");
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        clearAIKey();
+        toast("已清除本机保存的密钥");
+        renderAIBar(arch);
+      });
+    }
   }
 }
 
@@ -2171,21 +2248,18 @@ function renderResult() {
     <div class="result-section">
       <h2><span class="idx">07</span> AI 深度报告</h2>
       <p style="color:var(--text-faint);font-size:.8rem;margin-bottom:.8rem">由 DeepSeek 基于你录入的线索现场生成。属于假设性探索，不是预测或心理诊断。报告会根据你的线索与修改产生差异。</p>
-      <div class="ai-bar">
-        <button class="btn btn--cyan btn--sm" id="btn-ai-report">生成 AI 报告</button>
-      </div>
+      <div class="ai-bar" id="ai-bar"></div>
       <div class="ai-output" id="ai-output"></div>
     </div>
   `;
+
+  renderAIBar(arch);
 
   $("#result-grid")
     .querySelectorAll(".path-card")
     .forEach((p) => {
       p.addEventListener("click", () => p.classList.toggle("is-open"));
     });
-
-  const aiBtn = $("#btn-ai-report");
-  if (aiBtn) aiBtn.addEventListener("click", () => aiGenerateReport(arch));
 
   renderScenarios(arch);
 }
