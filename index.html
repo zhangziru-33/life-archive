@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>人生未解档案 · 深夜灵感局</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <!-- 星空背景 -->
+    <canvas id="starfield" aria-hidden="true"></canvas>
+
+    <div id="app" class="app">
+      <!-- ============ 首页 ============ -->
+      <section id="view-home" class="view view--home">
+        <div class="home-hero">
+          <div class="home-stamp">CASE FILE · 深夜灵感局</div>
+          <h1 class="home-title">
+            人生未解档案<span class="home-title__sub">深夜灵感局</span>
+          </h1>
+          <p class="home-slogan">每个人的人生，都有尚未解开的线索。</p>
+          <p class="home-intro">
+            把你经历过的事、做过的选择、错过的机会拼在一起，探索过去如何影响了现在，以及你还可以走向哪里。
+            在这里，你亲自收集线索、拖动卡片、建立关联，再由系统生成多种可能的解释与未来故事。
+          </p>
+          <div class="home-actions">
+            <button class="btn btn--primary" id="btn-open-archive">
+              开启我的档案
+            </button>
+            <button class="btn btn--ghost" id="btn-sample-archive">
+              探索示例档案
+            </button>
+            <button class="btn btn--ghost" data-nav="list">查看我的档案</button>
+          </div>
+          <p class="home-note">
+            数据默认仅保存在你的浏览器本地 · 可使用化名或虚构内容
+          </p>
+        </div>
+      </section>
+
+      <!-- ============ 档案创建 ============ -->
+      <section id="view-create" class="view view--create" hidden>
+        <div class="create-wrap">
+          <button class="link-back" data-nav="home">&larr; 返回</button>
+          <h2 class="view-title">开启一份深夜档案</h2>
+          <p class="view-sub">
+            选择你正在探索的方向，或写下一个属于自己的问题。
+          </p>
+
+          <div class="theme-grid" id="theme-grid"></div>
+
+          <div class="field">
+            <label class="field__label" for="custom-question"
+              >或写下你的探索问题</label
+            >
+            <textarea
+              id="custom-question"
+              class="input input--area"
+              rows="3"
+              placeholder="例如：如果有一天，我不再害怕犯错，我想成为一个能够独立完成项目的人。"
+            ></textarea>
+          </div>
+
+          <div class="create-actions">
+            <button class="btn btn--primary" id="btn-create-archive">
+              建立档案
+            </button>
+          </div>
+          <p id="create-hint" class="hint" hidden></p>
+        </div>
+      </section>
+
+      <!-- ============ 档案列表 ============ -->
+      <section id="view-list" class="view view--list" hidden>
+        <div class="list-wrap">
+          <button class="link-back" data-nav="home">&larr; 返回</button>
+          <h2 class="view-title">我的档案</h2>
+          <p class="view-sub">继续编辑，或开启一份新档案。</p>
+          <button class="btn btn--primary" id="btn-new-archive">
+            + 新建档案
+          </button>
+          <div class="archive-list" id="archive-list"></div>
+        </div>
+      </section>
+
+      <!-- ============ 案例库 ============ -->
+      <section id="view-cases" class="view view--cases" hidden>
+        <div class="cases-wrap">
+          <button class="link-back" data-nav="home">&larr; 返回</button>
+          <h2 class="view-title">案例档案库</h2>
+          <p class="view-sub">
+            浏览预设案例，进入探索或复制一份可编辑的个人档案。每个案例都有一组真实节点、线索链与待调查问题。
+          </p>
+          <div class="case-cats" id="case-cats"></div>
+          <div class="case-grid" id="case-grid"></div>
+        </div>
+      </section>
+
+      <!-- ============ 画布 ============ -->
+      <section id="view-canvas" class="view view--canvas" hidden>
+        <header class="canvas-topbar">
+          <div class="topbar-left">
+            <button class="link-back" data-nav="list">&larr; 档案</button>
+            <div class="topbar-titles">
+              <h1 class="canvas-title" id="canvas-title"></h1>
+              <p class="canvas-question" id="canvas-question"></p>
+            </div>
+          </div>
+          <div class="topbar-progress">
+            <span class="progress-label">线索</span>
+            <span class="progress-num" id="progress-count">0</span>
+          </div>
+          <div class="topbar-actions">
+            <button class="btn btn--ghost btn--sm" id="btn-timeline">
+              时间线
+            </button>
+            <button class="btn btn--ghost btn--sm" id="btn-undo">撤销</button>
+            <button class="btn btn--ghost btn--sm" id="btn-link-mode">
+              建立关联
+            </button>
+            <button class="btn btn--cyan btn--sm" id="btn-reveal">
+              揭示未解之谜
+            </button>
+          </div>
+        </header>
+
+        <div class="canvas-controls">
+          <div class="ctrl-group">
+            <input
+              id="node-search"
+              class="input ctrl-search"
+              placeholder="搜索画布节点…"
+              autocomplete="off"
+            />
+            <select id="theme-focus" class="input ctrl-select">
+              <option value="">全部主题</option>
+            </select>
+          </div>
+          <div class="ctrl-group ctrl-relations" id="relation-filter"></div>
+          <div class="ctrl-group">
+            <button class="btn btn--ghost btn--sm" id="btn-trace">
+              追踪线索
+            </button>
+            <button class="btn btn--ghost btn--sm" id="btn-focus-current">
+              聚焦当前
+            </button>
+            <button class="btn btn--ghost btn--sm" id="btn-view-all">
+              查看全部
+            </button>
+            <button class="chip" id="btn-isolated">孤立节点</button>
+            <button class="btn btn--ghost btn--sm" id="btn-investigation">
+              待调查
+            </button>
+          </div>
+          <div class="ctrl-group ctrl-case" id="case-actions"></div>
+        </div>
+        <div class="trace-bar" id="trace-bar" hidden></div>
+
+        <div class="canvas-body">
+          <!-- 左侧：线索库 -->
+          <aside class="side side--left">
+            <div class="side-head">
+              <span>线索卡片库</span>
+              <button class="btn btn--ghost btn--xs" id="btn-add-card">
+                + 新建线索
+              </button>
+            </div>
+            <div class="lib-search">
+              <input
+                id="lib-search-input"
+                class="input"
+                placeholder="搜索线索关键词…"
+                autocomplete="off"
+              />
+            </div>
+            <div class="type-filter" id="type-filter"></div>
+            <div class="lib-list" id="lib-list"></div>
+          </aside>
+
+          <!-- 中间：画布 -->
+          <main class="canvas-main" id="canvas-main">
+            <div class="canvas-toolbar">
+              <div class="zoom-ctrl">
+                <button id="zoom-out">&minus;</button>
+                <span id="zoom-label">100%</span>
+                <button id="zoom-in">+</button>
+                <button id="zoom-fit">适配</button>
+              </div>
+              <span class="canvas-hint-text"
+                >拖拽空白处平移 · 滚轮缩放 · 拖动卡片到画布</span
+              >
+            </div>
+            <div class="canvas-viewport" id="canvas-viewport">
+              <div class="canvas-world" id="canvas-world">
+                <svg class="edge-layer" id="edge-layer"></svg>
+                <div class="node-layer" id="node-layer"></div>
+              </div>
+              <div class="canvas-empty" id="canvas-empty">
+                <div class="empty-glyph">◈</div>
+                <p>从这里开始，把左侧的线索拖进画布</p>
+                <p class="empty-sub">
+                  拖动卡片 · 点击连线 · 拼出你的人生线索网络
+                </p>
+              </div>
+            </div>
+            <!-- 时间线视图 -->
+            <div class="timeline-view" id="timeline-view" hidden></div>
+            <!-- 待调查线索 -->
+            <div
+              class="investigation-view"
+              id="investigation-view"
+              hidden
+            ></div>
+          </main>
+
+          <!-- 右侧：详情/关系编辑 -->
+          <aside class="side side--right" id="side-right">
+            <div class="side-head"><span>线索详情</span></div>
+            <div class="detail" id="detail-panel"></div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ============ 结果页 ============ -->
+      <section id="view-result" class="view view--result" hidden>
+        <div class="result-wrap">
+          <div class="result-head">
+            <button class="link-back" data-nav="canvas">
+              &larr; 返回线索画布
+            </button>
+            <div class="result-head__actions">
+              <button class="btn btn--ghost btn--sm" data-nav="canvas">
+                重新探索
+              </button>
+              <button class="btn btn--primary btn--sm" id="btn-save-archive">
+                保存这份档案
+              </button>
+            </div>
+          </div>
+          <div class="result-hero">
+            <div class="result-stamp">REVELATION · 未解之谜揭示</div>
+            <h1 class="result-title" id="result-title"></h1>
+            <p class="result-question" id="result-question"></p>
+            <p class="result-disclaimer">
+              以下内容基于你录入的线索在本地整理生成，属于假设性故事探索，不是对未来的预测，也不是心理诊断。
+            </p>
+          </div>
+          <div class="result-grid" id="result-grid"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 通用模态框 -->
+    <div class="modal-backdrop" id="modal-backdrop" hidden>
+      <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast" hidden></div>
+
+    <script src="cases.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
