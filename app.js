@@ -1876,6 +1876,188 @@ function linkInterpretation(type, from, to) {
   }
 }
 
+/* ============ AI 深度报告（DeepSeek，可替换） ============ */
+const AI_CONFIG = {
+  // ⚠️ 演示密钥：纯前端静态站点会暴露在浏览器中，建议公开演示后到 DeepSeek 平台吊销或更换
+  apiKey: "sk-ab96116e4d5745c78ca4fbb0d745ca77",
+  endpoint: "https://api.deepseek.com/chat/completions",
+  model: "deepseek-chat",
+};
+
+const AI_SYSTEM_PROMPT = `你是「人生未解档案·深夜灵感局」的叙事助手，负责基于用户提供的线索生成一份人生探索报告。
+必须遵守以下规则：
+1. 只使用用户提供的线索，绝不编造用户没有提到的事实、人物或事件；
+2. 全部使用「可能」「一种解释是」「现有线索暂时支持」等谨慎措辞，禁止出现精确概率、确定性断言或结论性判断；
+3. 报告是假设性的故事探索，不是预测、不是心理诊断、不是人生建议的替代品；
+4. 若线索之间存在矛盾，如实指出矛盾本身，不要强行消除。
+输出必须是严格合法的 JSON，结构如下：
+{"summary":"一段整体洞察（不超过120字）","links":[{"from":"线索A标题","to":"线索B标题","why":"可能如何关联，1句话"}],"mysteries":["仍未回答的问题，2-4条"],"paths":[{"name":"路径名称","start":"起始选择","experiences":["2条可能经历"],"gains":["2条潜在收获"],"difficulties":["2条可能困难"],"unknown":["1条尚不确定因素"]}],"steps":["1-3条与内容相关的小行动"],"choices":[{"nodeTitle":"关键选择节点的标题","keep":"保持原选择可能如何","change":"改变选择可能如何","experiment":"先小规模试验可以怎么做"}]}
+choices 最多 3 个，只选与选择相关的节点。`;
+
+function buildArchivePrompt(archive) {
+  const cards = archive.nodes
+    .map((n) => {
+      const c = cardById(archive, n.cardId);
+      return c
+        ? {
+            id: c.id,
+            type: c.type,
+            title: c.title,
+            content: c.content,
+            time: c.time || null,
+          }
+        : null;
+    })
+    .filter(Boolean);
+  const relations = archive.relations
+    .map((r) => {
+      const a = cardById(archive, nodeById(archive, r.from).cardId);
+      const b = cardById(archive, nodeById(archive, r.to).cardId);
+      return a && b
+        ? {
+            from: a.title,
+            to: b.title,
+            type: r.type,
+            desc: r.desc || null,
+            trust: r.trust || "confirmed",
+          }
+        : null;
+    })
+    .filter(Boolean);
+  return JSON.stringify(
+    {
+      question: archive.question,
+      title: archive.title,
+      cards,
+      relations,
+    },
+    null,
+    1
+  );
+}
+
+async function callDeepSeek(prompt) {
+  const res = await fetch(AI_CONFIG.endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + AI_CONFIG.apiKey,
+    },
+    body: JSON.stringify({
+      model: AI_CONFIG.model,
+      messages: [
+        { role: "system", content: AI_SYSTEM_PROMPT },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+    }),
+  });
+  if (!res.ok) throw new Error("AI HTTP " + res.status);
+  const data = await res.json();
+  const content =
+    data.choices && data.choices[0] && data.choices[0].message.content;
+  if (!content) throw new Error("AI empty content");
+  return JSON.parse(content);
+}
+
+function renderAIResult(d) {
+  const linksHtml = (d.links || [])
+    .map(
+      (l) =>
+        `<div class="ai-link">「${esc(l.from || "")}」→「${esc(
+          l.to || ""
+        )}」<span class="ai-link__why">${esc(l.why || "")}</span></div>`
+    )
+    .join("");
+  const pathHtml = (d.paths || [])
+    .map(
+      (p) => `<div class="ai-path">
+      <div class="ai-path__name">${esc(p.name || "")}</div>
+      <div class="ai-path__start">起始选择：${esc(p.start || "")}</div>
+      <ul>
+        <li><b>可能经历</b>：${(p.experiences || [])
+          .map(escI)
+          .join("<br>")}</li>
+        <li><b>潜在收获</b>：${(p.gains || []).map(escI).join("<br>")}</li>
+        <li><b>可能困难</b>：${(p.difficulties || [])
+          .map(escI)
+          .join("<br>")}</li>
+        <li><b>尚不确定</b>：${(p.unknown || []).map(escI).join("<br>")}</li>
+      </ul>
+    </div>`
+    )
+    .join("");
+  const choiceHtml = (d.choices || [])
+    .map(
+      (c) => `<div class="ai-choice">
+      <div class="ai-choice__name">${esc(c.nodeTitle || "")}</div>
+      <div class="ai-choice__row"><b>保持原选择</b>：${esc(c.keep || "")}</div>
+      <div class="ai-choice__row"><b>改变选择</b>：${esc(c.change || "")}</div>
+      <div class="ai-choice__row"><b>小规模试验</b>：${esc(
+        c.experiment || ""
+      )}</div>
+    </div>`
+    )
+    .join("");
+  return `
+    ${d.summary ? `<div class="ai-summary">${esc(d.summary)}</div>` : ""}
+    ${
+      d.links && d.links.length
+        ? `<h3 class="ai-head">可能的关联</h3><div class="ai-links">${linksHtml}</div>`
+        : ""
+    }
+    ${
+      d.mysteries && d.mysteries.length
+        ? `<h3 class="ai-head">未解之谜</h3><div class="ai-mysteries">${d.mysteries
+            .map((m) => `<div class="ai-mystery">${esc(m)}</div>`)
+            .join("")}</div>`
+        : ""
+    }
+    ${
+      d.paths && d.paths.length
+        ? `<h3 class="ai-head">三条探索路径（假设）</h3><div class="ai-paths">${pathHtml}</div>`
+        : ""
+    }
+    ${
+      d.choices && d.choices.length
+        ? `<h3 class="ai-head">关键选择推演</h3><div class="ai-choices">${choiceHtml}</div>`
+        : ""
+    }
+    ${
+      d.steps && d.steps.length
+        ? `<h3 class="ai-head">现实中的下一步</h3><div class="ai-steps">${d.steps
+            .map(
+              (s, i) =>
+                `<div class="step-item"><span class="step-idx">${
+                  i + 1
+                }</span><span>${esc(s)}</span></div>`
+            )
+            .join("")}</div>`
+        : ""
+    }
+    <p class="ai-foot">本报告由 DeepSeek 基于你录入的线索现场生成，属于假设性探索，不是预测或心理诊断。</p>`;
+}
+
+async function aiGenerateReport(arch) {
+  const btn = $("#btn-ai-report");
+  const out = $("#ai-output");
+  if (!btn || !out) return;
+  btn.disabled = true;
+  btn.textContent = "正在整理线索…";
+  out.innerHTML = `<div class="ai-loading">◈ 正在基于你的线索生成报告，请稍候…</div>`;
+  try {
+    const data = await callDeepSeek(buildArchivePrompt(arch));
+    out.innerHTML = renderAIResult(data);
+  } catch (e) {
+    console.warn("AI report failed:", e);
+    out.innerHTML = `<div class="ai-error">AI 服务暂时不可用（网络或服务端限制），以上报告由本地规则生成，仍可正常使用。</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "重新生成 AI 报告";
+  }
+}
+
 function renderResult() {
   const arch = activeArchive();
   if (!arch) return showView("list");
@@ -1986,6 +2168,14 @@ function renderResult() {
       <p style="color:var(--text-faint);font-size:.8rem;margin-bottom:.8rem">选择一个关键选择节点，查看三种情景。此为基于现有线索的假设，不覆盖你的原始档案。</p>
       <div id="scenario-section"></div>
     </div>
+    <div class="result-section">
+      <h2><span class="idx">07</span> AI 深度报告</h2>
+      <p style="color:var(--text-faint);font-size:.8rem;margin-bottom:.8rem">由 DeepSeek 基于你录入的线索现场生成。属于假设性探索，不是预测或心理诊断。报告会根据你的线索与修改产生差异。</p>
+      <div class="ai-bar">
+        <button class="btn btn--cyan btn--sm" id="btn-ai-report">生成 AI 报告</button>
+      </div>
+      <div class="ai-output" id="ai-output"></div>
+    </div>
   `;
 
   $("#result-grid")
@@ -1993,6 +2183,9 @@ function renderResult() {
     .forEach((p) => {
       p.addEventListener("click", () => p.classList.toggle("is-open"));
     });
+
+  const aiBtn = $("#btn-ai-report");
+  if (aiBtn) aiBtn.addEventListener("click", () => aiGenerateReport(arch));
 
   renderScenarios(arch);
 }
